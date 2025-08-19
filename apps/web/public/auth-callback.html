@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Callback</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .loading {
+            color: #666;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Authentication</h2>
+        <p id="status" class="loading">Processing authentication...</p>
+    </div>
+
+    <script>
+        (function() {
+            const statusEl = document.getElementById('status');
+            
+            try {
+                // Get URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                const error = urlParams.get('error');
+                const state = urlParams.get('state');
+
+                if (error) {
+                    statusEl.textContent = `Authentication failed: ${error}`;
+                    statusEl.className = 'error';
+                    
+                    // Send error to parent window
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: 'AGILITY_AUTH_ERROR',
+                            error: error
+                        }, window.location.origin);
+                    }
+                    
+                    setTimeout(() => window.close(), 3000);
+                    return;
+                }
+
+                if (!code) {
+                    statusEl.textContent = 'No authorization code received';
+                    statusEl.className = 'error';
+                    
+                    // Send error to parent window
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: 'AGILITY_AUTH_ERROR',
+                            error: 'No authorization code received'
+                        }, window.location.origin);
+                    }
+                    
+                    setTimeout(() => window.close(), 3000);
+                    return;
+                }
+
+                // Success - we have the code
+                statusEl.textContent = 'Authentication successful! Closing window...';
+                statusEl.className = 'success';
+                
+                // Send success message to parent window
+                if (window.opener) {
+                    window.opener.postMessage({
+                        type: 'AGILITY_AUTH_SUCCESS',
+                        code: code,
+                        state: state
+                    }, window.location.origin);
+                }
+                
+                // Close the popup after a short delay to ensure message is sent
+                setTimeout(() => {
+                    window.close();
+                }, 1000);
+                
+            } catch (error) {
+                statusEl.textContent = `Error: ${error.message}`;
+                statusEl.className = 'error';
+                
+                // Send error to parent window
+                if (window.opener) {
+                    window.opener.postMessage({
+                        type: 'AGILITY_AUTH_ERROR',
+                        error: error.message
+                    }, window.location.origin);
+                }
+                
+                setTimeout(() => window.close(), 3000);
+            }
+        })();
+    </script>
+</body>
+</html> 
