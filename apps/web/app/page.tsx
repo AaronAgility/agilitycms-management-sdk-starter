@@ -2,16 +2,16 @@
 
 'use client';
 
-import { AgilityAuth } from '@repo/auth-tools/components';
-import { AuthProvider } from '@repo/auth-tools/components'; 
-import { useAgilityAuth } from '@repo/auth-tools/components';
-import { configureSdkAdapter } from '@repo/auth-tools/adapters';
+import { AgilityAuth } from '@agility/auth-tools/components';
+import { AuthProvider } from '@agility/auth-tools/components'; 
+import { useAgilityAuth } from '@agility/auth-tools/components';
+import { configureSdkAdapter } from '@agility/auth-tools/adapters';
 import { 
   AgilityAuthConfig, 
   ServerUser, 
   WebsiteAccess, 
   LocaleInfo 
-} from '@repo/auth-tools/models';
+} from '@agility/auth-tools/models';
 import * as ManagementSDK from '@agility/management-sdk';
 
 import { useEffect, useState } from 'react';
@@ -309,14 +309,23 @@ function AuthenticatedContent() {
   const auth = useAgilityAuth();
   const isAuthenticated = auth.isAuthenticated;
 
+  // If not authenticated, show the purple gradient background with auth components
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
+        <HeroSection />
+      </div>
+    );
+  }
+
+  // If authenticated, show the main dashboard with white background
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors overflow-auto">
       <HeroSection />
       
       {/* Main Content Area with proper scrolling */}
-      <div className={`${isAuthenticated ? 'pt-16' : ''}`}>
+      <div className="pt-16">
         {/* Dashboard and Content - Always show when authenticated */}
-        {isAuthenticated && (
           <div className="bg-white dark:bg-gray-900 pb-20">
             {/* Simple Dashboard Widgets */}
             <div className="max-w-4xl mx-auto p-8">
@@ -366,8 +375,6 @@ function AuthenticatedContent() {
                       <div className="text-blue-600 dark:text-blue-400">{'</AuthProvider>'}</div>
                     </div>
                   </div>
-                  </div>
-
 
                   {/* Step 4: Interactive Example */}
                   <div className="border-l-4 border-green-500 pl-6">
@@ -556,7 +563,7 @@ function AuthenticatedContent() {
               
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

@@ -1,19 +1,45 @@
 {
-  "name": "@repo/auth-tools",
+  "name": "@agility/auth-tools",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "Authentication components and utilities for Agility CMS Management SDK",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./components": "./src/components/index.ts",
-    "./auth": "./src/auth/index.ts",
-    "./models": "./src/models/index.ts",
-    "./adapters": "./src/adapters/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs", 
+      "require": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.mjs",
+      "require": "./dist/components/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts", 
+      "import": "./dist/auth/index.mjs",
+      "require": "./dist/auth/index.js"
+    },
+    "./models": {
+      "types": "./dist/models/index.d.ts",
+      "import": "./dist/models/index.mjs", 
+      "require": "./dist/models/index.js"
+    },
+    "./adapters": {
+      "types": "./dist/adapters/index.d.ts",
+      "import": "./dist/adapters/index.mjs",
+      "require": "./dist/adapters/index.js"
+    }
   },
   "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
     "lint": "eslint . --max-warnings 0",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepack": "npm run clean && npm run build"
   },
   "dependencies": {
     "axios": "^1.10.0",
@@ -28,9 +54,34 @@
     "@types/react": "19.1.0",
     "@types/react-dom": "19.1.1",
     "eslint": "^9.30.0",
+    "tsup": "^8.0.0",
     "typescript": "5.8.2"
   },
   "peerDependencies": {
     "@agility/management-sdk": "^0.1.33"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "package.json"
+  ],
+  "keywords": [
+    "agility",
+    "cms",
+    "auth",
+    "authentication",
+    "management-sdk",
+    "react",
+    "typescript"
+  ],
+  "author": "Agility CMS",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agility/agility-cms-management-sdk-auth-tools"
+  },
+  "homepage": "https://github.com/agility/agility-cms-management-sdk-auth-tools#readme",
+  "bugs": {
+    "url": "https://github.com/agility/agility-cms-management-sdk-auth-tools/issues"
   }
 }
