@@ -2,16 +2,23 @@
 
 'use client';
 
-import { AgilityAuth } from '@agility/auth-tools/components';
-import { AuthProvider } from '@agility/auth-tools/components'; 
-import { useAgilityAuth } from '@agility/auth-tools/components';
+import { AgilityAuth } from '@repo/auth-tools/components';
+import { AuthProvider } from '@repo/auth-tools/components'; 
+import { useAgilityAuth } from '@repo/auth-tools/components';
+import { configureSdkAdapter } from '@repo/auth-tools/adapters';
 import { 
   AgilityAuthConfig, 
   ServerUser, 
   WebsiteAccess, 
   LocaleInfo 
-} from '@agility/auth-tools/models';
+} from '@repo/auth-tools/models';
+import * as ManagementSDK from '@agility/management-sdk';
+
 import { useEffect, useState } from 'react';
+
+// Configure the auth-tools SDK adapter with the management SDK
+configureSdkAdapter(ManagementSDK);
+
 
 
 
