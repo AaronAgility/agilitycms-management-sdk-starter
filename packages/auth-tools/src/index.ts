@@ -3,3 +3,4 @@ export * from './auth';
 export * from './models';
 export * from './adapters';
 export * from './components';
+export * from './client';

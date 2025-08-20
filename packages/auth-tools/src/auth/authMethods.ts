@@ -118,35 +118,38 @@ export class AuthMethods {
      */
     async exchangeCodeForToken(request: TokenExchangeRequest, region?: string): Promise<OAuthTokenResponse> {
         try {
-            const data = new URLSearchParams({
-                grant_type: request.grantType || 'authorization_code',
-                code: request.code,
-                redirect_uri: request.redirectUri
+            // Call our API route for server-side token exchange with HTTP-only cookies
+            const response = await fetch('/api/auth/callback', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    code: request.code,
+                    redirectUri: request.redirectUri,
+                    region: region
+                }),
             });
 
-            const resp = await this._clientInstance.executeOAuthPost('token', data, region);
-            const tokenResponse = resp.data as OAuthTokenResponse;
-            
-            // Store tokens securely with expiration
-            const tokenData: StoredTokenData = {
-                accessToken: tokenResponse.access_token,
-                refreshToken: tokenResponse.refresh_token,
-                expiresAt: tokenResponse.expires_in ? Date.now() + (tokenResponse.expires_in * 1000) : undefined,
-                tokenType: tokenResponse.token_type,
-                scope: tokenResponse.scope
-            };
-            
-            await this._tokenStorage.setTokens(tokenData);
-            
-            // Set token in shared options for immediate use
-            this._options.token = tokenResponse.access_token;
-            
-            return tokenResponse;
-        } catch (err: any) {
-            if (err.response?.data) {
-                const errorData = err.response.data as OAuthErrorResponse;
-                throw new Exception(`OAuth token exchange failed: ${errorData.error} - ${errorData.error_description || 'Unknown error'}`, err);
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Token exchange failed');
             }
+
+            const result = await response.json();
+            console.log('Token exchange successful via API route');
+
+            // Return a mock response since the real tokens are now in HTTP-only cookies
+            // The actual tokens are not accessible to client-side code for security
+            return {
+                access_token: 'stored_in_httponly_cookie',
+                refresh_token: 'stored_in_httponly_cookie',
+                token_type: 'Bearer',
+                expires_in: 3600,
+                scope: 'openid profile email offline_access'
+            } as OAuthTokenResponse;
+            
+        } catch (err: any) {
             throw new Exception('Unable to exchange authorization code for token', err);
         }
     }
@@ -331,6 +334,16 @@ export class AuthMethods {
      * Clear all authentication data
      */
     public async clearAuthentication(): Promise<void> {
+        try {
+            // Call API to clear HTTP-only cookies
+            await fetch('/api/auth/callback', {
+                method: 'DELETE',
+            });
+        } catch (error) {
+            console.error('Failed to clear server-side auth cookies:', error);
+        }
+        
+        // Also clear local storage for backward compatibility
         await this._tokenStorage.clearTokens();
         this._options.token = undefined;
     }
@@ -340,8 +353,23 @@ export class AuthMethods {
      * @returns Promise resolving to true if authenticated
      */
     public async isAuthenticated(): Promise<boolean> {
-        const validToken = await this.getValidAccessToken();
-        return validToken !== null;
+        try {
+            // Check if we're in a browser environment and can use the auth status endpoint
+            if (typeof window !== 'undefined') {
+                const response = await fetch('/api/auth/status');
+                if (response.ok) {
+                    const result = await response.json();
+                    return result.authenticated === true;
+                }
+            }
+            
+            // Fallback to token storage check (for server-side or backwards compatibility)
+            const validToken = await this.getValidAccessToken();
+            return validToken !== null;
+        } catch (error) {
+            console.warn('Failed to check authentication status:', error);
+            return false;
+        }
     }
 
     /**

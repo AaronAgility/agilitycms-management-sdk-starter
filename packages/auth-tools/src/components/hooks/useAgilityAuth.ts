@@ -8,7 +8,6 @@ import {
   UseAgilityAuthReturn, 
   initialAuthState 
 } from '../../models/authState';
-import { defaultSdkAdapter } from '../../adapters/sdkAdapter';
 
 /**
  * Authentication reducer to manage complex state updates
@@ -98,25 +97,32 @@ export function useAgilityAuth(options?: {
   }, [state.isAuthenticated]);
 
   /**
-   * Update token information from storage
+   * Update token information from auth status endpoint
    */
   const updateTokenInfo = useCallback(async () => {
     try {
-      const tokenStorage = authMethods.getTokenStorage();
-      if (tokenStorage) {
-        const tokens = await tokenStorage.getTokens();
-        if (tokens) {
-          setTokenInfo({
-            accessToken: tokens.accessToken,
-            refreshToken: tokens.refreshToken,
-            expiresAt: tokens.expiresAt,
-            tokenType: tokens.tokenType,
-            scope: tokens.scope
-          });
+      // With HTTP-only cookies, we can't access token details directly
+      // Get basic info from the auth status endpoint
+      if (typeof window !== 'undefined') {
+        const response = await fetch('/api/auth/status');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.authenticated) {
+            setTokenInfo({
+              accessToken: 'stored_in_httponly_cookie',
+              refreshToken: 'stored_in_httponly_cookie', 
+              expiresAt: result.expiresAt,
+              tokenType: 'Bearer',
+              scope: 'openid profile email offline_access'
+            });
+          } else {
+            setTokenInfo({});
+          }
         }
       }
     } catch (error) {
       console.error('Failed to update token info:', error);
+      setTokenInfo({});
     }
   }, [authMethods]);
 
@@ -125,40 +131,74 @@ export function useAgilityAuth(options?: {
    */
   const checkAuthStatus = useCallback(async () => {
     try {
+      console.log('checkAuthStatus: Starting auth check...');
       const isAuthenticated = await authMethods.isAuthenticated();
+      console.log('checkAuthStatus: isAuthenticated =', isAuthenticated);
       
       if (isAuthenticated) {
         dispatch({ type: 'SET_AUTHENTICATED', payload: true });
-        
-        // Try to get user info and website access if SDK is available
-        if (defaultSdkAdapter.isMainSdkAvailable()) {
-          try {
-            const apiClient = defaultSdkAdapter.createApiClient(options?.sdkOptions);
-            const user = await apiClient.serverUserMethods.me();
-            dispatch({ type: 'SET_USER', payload: user });
-            
-            // Extract website access information
-            const websites: WebsiteAccess[] = user.websiteAccess?.map((access: any, index: number) => ({
-              websiteGuid: access.guid || `website-${index}`,
-              websiteName: (access.displayName || access.websiteName) || access.guid || `Website ${index + 1}`,
-              websiteDescription: access.description || access.websiteName || access.guid || `Website ${index + 1}`
-            })) || [];
-            
-            dispatch({ type: 'SET_WEBSITE_ACCESS', payload: websites });
-          } catch (error) {
-            console.warn('Failed to get user info from SDK:', error);
-            // Still authenticated, just no user info available
-          }
-        }
-        
         // Update token info
         await updateTokenInfo();
+      } else {
+        console.log('checkAuthStatus: User not authenticated');
+        dispatch({ type: 'SET_AUTHENTICATED', payload: false });
+        dispatch({ type: 'SET_USER', payload: null });
+        dispatch({ type: 'SET_WEBSITE_ACCESS', payload: [] });
       }
     } catch (error) {
-      console.error('Authentication check failed:', error);
+      console.error('checkAuthStatus: Authentication check failed:', error);
       dispatch({ type: 'SET_ERROR', payload: 'Failed to check authentication status' });
     }
-  }, [authMethods, options?.sdkOptions, updateTokenInfo]);
+  }, [authMethods, updateTokenInfo]);
+
+  /**
+   * Fetch user info and website access using the management SDK
+   * This is separate from authentication and can fail without affecting auth status
+   */
+  const fetchUserInfo = useCallback(async () => {
+    try {
+      const accessToken = await authMethods.getValidAccessToken();
+      
+      if (!accessToken) {
+        console.warn('fetchUserInfo: No valid access token available');
+        return;
+      }
+
+      console.log('fetchUserInfo: Creating SDK client with token...');
+      
+      // Try to dynamically import the management SDK
+      try {
+        const { ApiClient } = await import('@agility/management-sdk');
+        
+        // Create the client directly with the token
+        const client = new ApiClient({ token: accessToken } as any);
+        
+        console.log('fetchUserInfo: Fetching user info from management SDK...');
+        const user = await client.serverUserMethods.me('');
+        console.log('fetchUserInfo: User fetched successfully:', user?.userName || user?.emailAddress);
+        dispatch({ type: 'SET_USER', payload: user });
+        
+        // Extract website access information
+        const websites: WebsiteAccess[] = user.websiteAccess?.map((access: any, index: number) => ({
+          websiteGuid: access.guid || `website-${index}`,
+          websiteName: (access.displayName || access.websiteName) || access.guid || `Website ${index + 1}`,
+          websiteDescription: access.description || access.websiteName || access.guid || `Website ${index + 1}`
+        })) || [];
+        
+        dispatch({ type: 'SET_WEBSITE_ACCESS', payload: websites });
+      } catch (sdkError) {
+        console.error('fetchUserInfo: Management SDK error:', sdkError);
+        // Don't throw - user info is optional
+        dispatch({ type: 'SET_USER', payload: null });
+        dispatch({ type: 'SET_WEBSITE_ACCESS', payload: [] });
+      }
+    } catch (error) {
+      console.error('fetchUserInfo: Failed to get user info:', error);
+      // Don't throw - user info is optional
+      dispatch({ type: 'SET_USER', payload: null });
+      dispatch({ type: 'SET_WEBSITE_ACCESS', payload: [] });
+    }
+  }, [authMethods]);
 
   /**
    * Authenticate user using OAuth flow
@@ -221,7 +261,22 @@ export function useAgilityAuth(options?: {
 
               // Re-check auth status to update state
               await checkAuthStatus();
-              resolve();
+              
+              // Verify that authentication was successful
+              const isAuthenticated = await authMethods.isAuthenticated();
+              if (isAuthenticated) {
+                console.log('Authentication completed successfully');
+                
+                // Fetch user info asynchronously (non-blocking)
+                fetchUserInfo().catch(error => {
+                  console.warn('Failed to fetch user info after authentication:', error);
+                });
+                
+                dispatch({ type: 'SET_LOADING', payload: false });
+                resolve();
+              } else {
+                reject(new Error('Authentication verification failed'));
+              }
             } catch (error) {
               reject(error);
             }
@@ -242,24 +297,14 @@ export function useAgilityAuth(options?: {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [authMethods, options, checkAuthStatus]);
+  }, [authMethods, options, checkAuthStatus, fetchUserInfo]);
 
   /**
    * Sign out user and clear all state
    */
   const signOut = useCallback(async () => {
     try {
-      // Try to sign out from SDK if available
-      if (defaultSdkAdapter.isMainSdkAvailable()) {
-        try {
-          const apiClient = defaultSdkAdapter.createApiClient(options?.sdkOptions);
-          await apiClient.signOut();
-        } catch (error) {
-          console.warn('Failed to sign out from SDK:', error);
-        }
-      }
-      
-      // Clear local authentication
+      // Clear local authentication - this handles token revocation
       await authMethods.clearAuthentication();
       dispatch({ type: 'SIGN_OUT' });
       setTokenInfo({});
@@ -267,7 +312,7 @@ export function useAgilityAuth(options?: {
       console.error('Sign out failed:', error);
       dispatch({ type: 'SET_ERROR', payload: 'Failed to sign out. Please try again.' });
     }
-  }, [authMethods, options?.sdkOptions]);
+  }, [authMethods]);
 
   /**
    * Select a website and load its locales
@@ -283,9 +328,20 @@ export function useAgilityAuth(options?: {
     dispatch({ type: 'CLEAR_ERROR' });
 
     try {
-      if (defaultSdkAdapter.isMainSdkAvailable()) {
-        const apiClient = defaultSdkAdapter.createApiClient(options?.sdkOptions);
-        const localesList = await apiClient.instanceMethods.getLocales(websiteGuid);
+      // Get access token and create SDK client directly
+      const accessToken = await authMethods.getValidAccessToken();
+      
+      if (!accessToken) {
+        throw new Error('No valid access token available for fetching locales');
+      }
+      
+      // Try to import and use the management SDK directly
+      try {
+        const { ApiClient } = await import('@agility/management-sdk');
+        
+        const client = new ApiClient({ token: accessToken } as any);
+        
+        const localesList = await client.instanceMethods.getLocales(websiteGuid);
         
         // Convert to our expected format
         const formattedLocales: LocaleInfo[] = localesList.map((locale: any, index: number) => ({
@@ -297,8 +353,9 @@ export function useAgilityAuth(options?: {
         }));
 
         dispatch({ type: 'SET_LOCALES', payload: formattedLocales });
-      } else {
-        throw new Error('SDK not available for fetching locales');
+      } catch (sdkError) {
+        console.warn('Management SDK not available for fetching locales:', sdkError);
+        throw new Error('Management SDK not available for fetching locales');
       }
     } catch (error) {
       console.error('Failed to fetch locales:', error);
@@ -306,7 +363,7 @@ export function useAgilityAuth(options?: {
     } finally {
       dispatch({ type: 'SET_LOADING_LOCALES', payload: false });
     }
-  }, [options?.sdkOptions]);
+  }, [authMethods]);
 
   /**
    * Select a locale
@@ -340,18 +397,58 @@ export function useAgilityAuth(options?: {
 
   /**
    * Get API client instance for direct access
+   * Returns a properly initialized management SDK client
    */
-  const getApiClient = useCallback(() => {
-    if (defaultSdkAdapter.isMainSdkAvailable()) {
-      return defaultSdkAdapter.createApiClient(options?.sdkOptions);
+  const getApiClient = useCallback(async () => {
+    try {
+      const accessToken = await authMethods.getValidAccessToken();
+      
+      if (!accessToken) {
+        console.warn('No valid access token available for creating API client');
+        return null;
+      }
+      
+      const { ApiClient } = await import('@agility/management-sdk');
+      
+      return new ApiClient({ token: accessToken } as any);
+    } catch (error) {
+      console.error('Failed to create API client:', error);
+      return null;
     }
-    return null;
-  }, [options?.sdkOptions]);
+  }, [authMethods, options?.sdkOptions]);
+
+  /**
+   * Get the full management SDK client for advanced usage
+   * Returns the complete management SDK with all methods
+   */
+  const getFullApiClient = useCallback(async () => {
+    try {
+      const accessToken = await authMethods.getValidAccessToken();
+      
+      if (!accessToken) {
+        console.warn('No valid access token available for creating full API client');
+        return null;
+      }
+      
+      const { ApiClient } = await import('@agility/management-sdk');
+      
+      return new ApiClient({ token: accessToken } as any);
+    } catch (error) {
+      console.error('Failed to create full API client:', error);
+      return null;
+    }
+  }, [authMethods, options?.sdkOptions]);
 
   // Computed values
   const isReady = useMemo(() => 
     state.isAuthenticated && !state.isLoading && !state.isLoadingLocales,
     [state.isAuthenticated, state.isLoading, state.isLoadingLocales]
+  );
+
+  // Enhanced auth ready state that considers user data loading
+  const isAuthReady = useMemo(() => 
+    state.isAuthenticated && !state.isLoading,
+    [state.isAuthenticated, state.isLoading]
   );
 
   const hasSelection = useMemo(() => 
@@ -392,6 +489,7 @@ export function useAgilityAuth(options?: {
     
     // Computed
     isReady,
+    isAuthReady,
     hasSelection,
     currentSelection,
     
@@ -399,5 +497,6 @@ export function useAgilityAuth(options?: {
     tokenInfo,
     getTokens,
     getApiClient,
+    getFullApiClient,
   };
 }

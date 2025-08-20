@@ -171,6 +171,7 @@ export interface UseAgilityAuthReturn {
   
   // Computed
   isReady: boolean;
+  isAuthReady: boolean;
   hasSelection: boolean;
   currentSelection: {
     websiteName: string;
@@ -186,7 +187,8 @@ export interface UseAgilityAuthReturn {
     scope?: string;
   };
   getTokens: () => Promise<any>;
-  getApiClient: () => any;
+  getApiClient: () => Promise<any>;
+  getFullApiClient: () => Promise<any>;
 }
 
 /**
