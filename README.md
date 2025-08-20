@@ -30,13 +30,13 @@ A comprehensive starter project for working with the Agility CMS Management SDK 
 ### 1. Install Dependencies
 
 ```bash
-pnpm install
+pnpm i
 ```
 
 ### 2. Start Development
 
 ```bash
-pnpm dev
+turbo dev
 ```
 
 This will start:
