@@ -2,6 +2,13 @@
 
 A starter project for working with the AgilityCMS Management SDK in a modern monorepo setup.
 
+## LoginPanel Component
+<img width="1873" height="780" alt="Screenshot 2025-08-20 at 8 50 13 AM" src="https://github.com/user-attachments/assets/75146fe1-316d-43f0-8171-faf49683d83e" />
+## TopBar Component
+<img width="1870" height="784" alt="Screenshot 2025-08-20 at 8 50 03 AM" src="https://github.com/user-attachments/assets/8a9b92c1-7b6f-4fe2-b2dc-0e00c879d999" />
+## 
+
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) (v18 or higher recommended)
